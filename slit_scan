@@ -1,11 +1,17 @@
 #!/bin/bash
-mkfifo raw_data.fifo
 source=$1
 
-ffmpeg -i "$source"  -vcodec rawvideo -f rawvideo -pix_fmt rgb24 -y ./raw_data.fifo &
+filename=$(basename "$1")
+extension="${filename##*.}"
+filename="${filename%.*}"
 
-./converter `./video_size.py "$source"` raw_data.fifo
+
+mkfifo raw_data.fifo
+
+ffmpeg -i "$source" -vsync 2 -vcodec rawvideo -f rawvideo -pix_fmt rgb24 -y ./raw_data.fifo &
+
+./converter $CVTOPTS -o"$filename.png" `./video_size.py "$source"` raw_data.fifo
 
 rm raw_data.fifo
 
-echo "Converted data created"
+echo "Converted data $filename.png created"

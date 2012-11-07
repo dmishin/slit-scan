@@ -1,2 +1,2 @@
 #!/bin/bash
-g++ slit_scan_raw.cpp -o converter 
+g++ -DNDEBUG -O2 slit_scan_raw.cpp -o converter 
