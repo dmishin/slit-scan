@@ -34,6 +34,7 @@ bool SavingFrameHandler::handle(AVFrame *pFrame, int width, int height, int iFra
   if ( iFrame % save_every != 0 ) return true;
   
   // Open file
+  printf( "Saving frame %d\n", iFrame );
   sprintf(szFilename, "frame%d.ppm", iFrame);
   pFile=fopen(szFilename, "wb");
   if(pFile==NULL)
@@ -160,7 +161,7 @@ int process_ffmpeg_file( const char *fname, FrameHandler &handler )
             pFrameRGB->linesize
         );
 	// handle the frame
-	if (! handler.handle(pFrameRGB, pCodecCtx->width, pCodecCtx->height, i) )
+	if (! handler.handle(pFrameRGB, pCodecCtx->width, pCodecCtx->height, i++) )
 	  break;
       }
     }
