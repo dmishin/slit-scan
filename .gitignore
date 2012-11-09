@@ -1,0 +1,7 @@
+*.png
+*.raw
+*.fifo
+photos/*
+videos/*
+*~
+\#*\#
