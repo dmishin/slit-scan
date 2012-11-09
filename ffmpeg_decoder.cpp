@@ -1,8 +1,13 @@
 //Based on sample code from https://github.com/mpenkov/ffmpeg-tutorial
 
+#define __STDC_CONSTANT_MACROS
+#include <stdint.h>
+
+extern "C"{
 #include <libavcodec/avcodec.h>
 #include <libavformat/avformat.h>
 #include <libswscale/swscale.h>
+}
 
 #include <stdio.h>
 
@@ -32,7 +37,7 @@ bool SavingFrameHandler::handle(AVFrame *pFrame, int width, int height, int iFra
   sprintf(szFilename, "frame%d.ppm", iFrame);
   pFile=fopen(szFilename, "wb");
   if(pFile==NULL)
-    return;
+    return false;
   
   // Write header
   fprintf(pFile, "P6\n%d %d\n255\n", width, height);
@@ -154,8 +159,9 @@ int process_ffmpeg_file( const char *fname, FrameHandler &handler )
             pFrameRGB->data,
             pFrameRGB->linesize
         );
-	// Save the frame to disk
-	handler.handle(pFrameRGB, pCodecCtx->width, pCodecCtx->height, i);
+	// handle the frame
+	if (! handler.handle(pFrameRGB, pCodecCtx->width, pCodecCtx->height, i) )
+	  break;
       }
     }
     
