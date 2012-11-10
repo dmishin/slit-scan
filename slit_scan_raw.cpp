@@ -176,10 +176,10 @@ bool Options::parse(int argc, char *argv[])
     orientation = parse_orientation(options[ORIENTATION].last()->arg);
 
   if (options[OUTPUT])
-    output = null_to_empty(null_to_empty(options[OUTPUT].last()->arg));
+    output = null_to_empty(options[OUTPUT].last()->arg);
 
   if (options[RAW_OUTPUT])
-    raw_output = null_to_empty(null_to_empty(options[RAW_OUTPUT].last()->arg));
+    raw_output = null_to_empty(options[RAW_OUTPUT].last()->arg);
 
   if (options[POSITION]){
     stringstream ss(null_to_empty(options[POSITION].last()->arg));
