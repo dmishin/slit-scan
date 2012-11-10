@@ -1,31 +1,115 @@
 #include <iostream>
 #include <fstream>
-#include <vector>
 #include <cstdlib>
 #include <sstream>
-//pacman -S pstreams
-#include <pstreams/pstream.h>
 #include <stdexcept>
 #include <sstream>
+#include <cassert>
+
 #include "optionparser.h"
+#include "ffmpeg_decoder.hpp"
 
 using namespace std;
 
-
-struct PixelT{
-  unsigned char R, G, B;
+enum SlitOrientation{
+  SlitVertical, SlitHorizontal
 };
 
-int process_raw_data( int max_frames, int w, int h, int pos, std::istream &raw_video, std::ostream &ostream );
-int extract_column_simple( int max_frames, int w, int h, int pos, std::istream &raw_video, std::ostream &ostream );
-int extract_row_simple   ( int max_frames, int w, int h, int pos, std::istream &raw_video, std::ostream &ostream );
+class SlitExtractor: public FrameHandler{
+public:
+  double slit_position_rel;
+  size_t slit_position;
+  SlitOrientation orientation;
+  std::ostream &output;
+  size_t width, height;
+  size_t frames; 
+public:
+  SlitExtractor( double pos, SlitOrientation o, std::ostream &output_ );
+  virtual bool handle(AVFrame *pFrame, int width, int height, int iFrame);
+  int slit_width()const;
+  int frames_processed()const{ return frames; };
+private:
+  void extract_vertical(AVFrame *pFrame);
+  void extract_horizontal(AVFrame *pFrame);
+  int get_perpendicular_size()const; //size of the frame in direction, perpendicular to the slit
+};
 
+SlitExtractor::SlitExtractor(double pos, SlitOrientation o, std::ostream &output_)
+    :slit_position_rel(pos)
+    ,orientation(o)
+    ,output(output_)
+{
+  assert( pos >=0 && pos <= 1.0 );
+  frames = 0;
+  slit_position = 0;
+}
+
+bool SlitExtractor::handle(AVFrame *pFrame, int width_, int height_, int iFrame)
+{
+  if (frames == 0){
+    //first frame: perform some initialization
+    width = width_;
+    height = height_;
+    slit_position = (int)((get_perpendicular_size()-1)*slit_position_rel);
+  }else{
+    if (width_ != width || height_ != height )
+      throw logic_error( "Frame size changed during playback. How this can be?" );
+  }
+
+  switch (orientation){
+  case SlitVertical:     extract_vertical(pFrame);
+    break;
+  case SlitHorizontal:   extract_horizontal(pFrame);
+    break;
+  }
+  frames ++;
+  return true;
+}
+int SlitExtractor::get_perpendicular_size()const
+{
+  switch( orientation ){
+  case SlitVertical:
+    return width;
+  case SlitHorizontal:
+    return height;
+  }
+}
+int SlitExtractor::slit_width()const
+{
+  switch( orientation ){
+  case SlitVertical:
+    return height;
+  case SlitHorizontal:
+    return width;
+  }
+}
+void SlitExtractor::extract_vertical(AVFrame *pFrame)
+{
+  uint8_t *buffer = new uint8_t[ height * 3 ];
+  size_t frame_pos = slit_position * 3;
+  assert( frame_pos < pFrame->linesize[0] );
+  size_t buffer_pos = 0;
+  for( int y = 0; y < height; ++y ){
+    buffer[buffer_pos++] = pFrame->data[0][frame_pos];
+    buffer[buffer_pos++] = pFrame->data[0][frame_pos+1];
+    buffer[buffer_pos++] = pFrame->data[0][frame_pos+2];
+    frame_pos += pFrame->linesize[0];
+  }
+  output.write((const char*)buffer, height * 3);
+  delete[] buffer;
+}
+void SlitExtractor::extract_horizontal(AVFrame *pFrame)
+{
+  output.write((const char *)(pFrame->data[0] + 
+			      pFrame->linesize[0] * slit_position), 
+	       width * 3);
+}
 
 enum  optionIndex { UNKNOWN, HELP, OUTPUT, RAW_OUTPUT, ORIENTATION, POSITION };
 
 const option::Descriptor usage[] =
 {
- {UNKNOWN, 0, "", "",option::Arg::None, "USAGE: converter [options] width height source\n\n"
+ {UNKNOWN, 0, "", "",option::Arg::None, "USAGE: converter [options] source.mpg\n\n"
                                         "Options:" },
  {HELP, 0,"", "help",option::Arg::None, 
   "  --help  \tPrint usage and exit." },
@@ -41,9 +125,6 @@ const option::Descriptor usage[] =
  {0,0,0,0,0,0}
 };
 
-enum SlitOrientation{
-  SlitVertical, SlitHorizontal
-};
 
 SlitOrientation parse_orientation(const std::string &orientation)
 {
@@ -63,24 +144,16 @@ struct Options{
   string output;
   string raw_output;
   double position;
-  int w, h;
   string input_file;
   Options()
     :orientation(SlitVertical)
     ,output("output.png")
     ,raw_output("output.raw")
     ,position(50.0)
-    ,w(0), h(0)
   {}
   bool parse( int argc, char *argv[] );
 };
-int parse_int( const char *s )
-{
-  stringstream ss(s);
-  int rval=0;
-  if ( !(ss>>rval) ) throw invalid_argument("Failed to parse integer");
-  return rval;
-}
+
 bool Options::parse(int argc, char *argv[])
 {
   if (argc > 0){ //skip program name
@@ -115,24 +188,12 @@ bool Options::parse(int argc, char *argv[])
       throw std::invalid_argument("Postion must be in range [0..100]");
   }
 
-  if (parse.nonOptionsCount() != 3){
-    stringstream ss; ss<<"Must have 3 arguemnts: width, height and input file, but have "<<parse.nonOptionsCount()<<" :";
-    for (int i = 0; i < parse.nonOptionsCount(); ++i)
-      ss << "#" << i+1 << ": [" << parse.nonOption(i) << "] ";
+  if (parse.nonOptionsCount() != 1){
+    stringstream ss; ss<<"Must have 1 arguemnt: input file";
     throw std::invalid_argument(ss.str());
   }
-  w = parse_int(parse.nonOption(0));
-  h = parse_int(parse.nonOption(1));
-  input_file = parse.nonOption(2);
-  //PARSE positional arguments
-  if ( w <=0 || w > 10000 ){
-    stringstream ss; ss<< "Width "<<w<<" is incorrect"<<endl;
-    throw std::invalid_argument(ss.str());
-  }
-  if ( h <=0 || h > 10000 ){
-    stringstream ss; ss<< "Height "<<h<<" is incorrect"<<endl;
-    throw std::invalid_argument(ss.str());
-  }
+  input_file = parse.nonOption(0);
+
   cout << "Passed options:\n"
        << " Orientaion:"<<orientation<<endl
        << " Position:"<<position<<endl
@@ -148,134 +209,34 @@ int main( int argc, char *argv[] )
   try{
     if ( !options.parse(argc, argv) )
       return 0;
-  }catch(std::invalid_argument err){
-    cerr << "Failed to parse options:"<<err.what()<<endl;
-    return 1;
-  }catch(std::exception err){
+  }catch(std::exception &err){
     cerr << "Failed to parse options:"<<err.what()<<endl;
     return 1;
   }
 
   ofstream ostream( options.raw_output.c_str(), ios_base::binary );
-  ifstream istream( options.input_file.c_str(), ios_base::binary );
 
-  int frames;
-  int row_size;
-  switch (options.orientation){
-  case SlitVertical:
-    frames = extract_column_simple( 1000000, options.w, options.h, 
-				    int(options.position*options.w/100), istream, ostream );
-    row_size = options.h;
-    break;
-  case SlitHorizontal:
-    frames = extract_row_simple   ( 1000000, options.w, options.h, 
-				    int(options.position*options.h/100), istream, ostream );
-    row_size = options.w;
-    break;
+  SlitExtractor extractor( options.position*0.01, options.orientation, ostream );
+
+  // Register all formats and codecs
+  av_register_all();
+  try{
+    process_ffmpeg_file( options.input_file.c_str(), extractor );
+  }catch(std::exception &err){
+    cerr << "Error processing file:"<<err.what()<<endl;
+    return 1;
   }
-  ostream.close();
 
+  if (extractor.frames_processed() == 0){
+    cerr << "No frames were processed"<<endl;
+    return 1;
+  }
   //convert -size 360x1072 -depth 8 rgb:output_raw.data -transpose  image.jpg
   stringstream command;
-  command << "convert -size "<<row_size<<"x"<<frames
+  command << "convert -size "<<extractor.slit_width()<<"x"<<extractor.frames_processed()
 	  <<" -depth 8 rgb:\""<<options.raw_output<<"\""
 	  <<" -transpose "
 	  << "\""<<options.output<<"\"";
-  system( command.str().c_str() );
-  return 0;
+  return system( command.str().c_str() );
 }
 
-void read_frame( std::vector<PixelT> &frame, int w, int h, std::istream &raw_video)
-{
-  frame.resize(w*h);
-  unsigned char buf[3];
-  int pos = 0;
-  for (int y = 0; y < h; ++y ){
-    for (int x = 0; x < w; ++ x, ++pos){
-      raw_video.read( (char*)buf, 3 );
-      PixelT &pix(frame[pos]);
-      pix.R = buf[0];
-      pix.G = buf[1];
-      pix.B = buf[2];
-    }
-  }
-}
-
-void extract_column( const std::vector<PixelT> &frame, int w, int col, std::vector<PixelT> &column )
-{
-  int pos = col;
-  int idx = 0;
-  while ( pos < frame.size() ){
-    column[idx] = frame[pos];
-    idx ++;
-    pos += w;
-  }
-}
-void write_column( const std::vector<PixelT> &column, std::ostream &ostream )
-{
-  std::vector<PixelT>::const_iterator i, e = column.end();
-  unsigned char buf[3];
-  for( i = column.begin(); i != e; ++ i){
-    buf[0] = i->R;
-    buf[1] = i->G;
-    buf[2] = i->B;
-    ostream.write( (char *)buf, 3 );
-  }
-}
-int process_raw_data( int max_frames, int w, int h, int pos, std::istream &raw_video, std::ostream &ostream )
-{
-  std::vector<PixelT> frame;
-  frame.resize(w*h);
-
-  std::vector<PixelT> column;
-  column.resize(h);
-
-  int frames = 0;
-  do{
-    read_frame( frame, w, h, raw_video );
-    extract_column( frame, w, pos, column );
-    write_column( column, ostream );
-    frames ++;
-  }while (raw_video && (max_frames<=0 || frames < max_frames));
-  cout << "Done reading "<<frames<<" frames"<<endl;
-  return frames;
-}
-int extract_column_simple( int max_frames, int w, int h, int pos, std::istream &raw_video, std::ostream &ostream )
-{
-  std::vector<char> row_buffer;
-  row_buffer.resize(w*3);
-  int frame = 0;
-  while ( raw_video && (max_frames <= 0 || frame < max_frames) ){
-    for (int y = 0; y < h; ++y ){ 
-      raw_video.read( &(row_buffer[0]), row_buffer.size() );
-      ostream.write( &(row_buffer[pos*3]), 3 );
-    }
-    frame ++;
-  };
-  return frame;
-}
-int extract_row_simple( int max_frames, int w, int h, int pos, std::istream &raw_video, std::ostream &ostream )
-{
-  std::vector<char> row_buffer;
-  row_buffer.resize(w*3);
-  int frame = 0;
-  while ( raw_video && (max_frames <= 0 || frame < max_frames) ){
-    for (int y = 0; y < h; ++y ){ 
-      raw_video.read( &(row_buffer[0]), row_buffer.size() );
-      if (y == pos)
-	ostream.write( &(row_buffer[0]), row_buffer.size() );
-    }
-    frame ++;
-  };
-  return frame;
-}
-
-void process_pstream( const std::string ifile )
-{
-  // run a process and create a streambuf that reads its stdout and stderr
-  redi::ipstream proc("./some_command", redi::pstreams::pstderr);
-
-  //ffmpeg -i "$source"  -vcodec rawvideo -f rawvideo -pix_fmt rgb24 -
-  
-
-}
