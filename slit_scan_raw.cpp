@@ -176,7 +176,7 @@ bool Options::parse(int argc, char *argv[])
   option::Option* buffer  = new option::Option[stats.buffer_max];
   option::Parser parse(usage, argc, argv, options, buffer);
   if (parse.error())
-    throw std::invalid_argument("Options parsing failed");
+    throw invalid_argument("Failed to parse options");
 
   if (options[HELP] || argc == 0) {
     option::printUsage(cout, usage);
@@ -194,13 +194,14 @@ bool Options::parse(int argc, char *argv[])
 
   if (options[POSITION]){
     stringstream ss(null_to_empty(options[POSITION].last()->arg));
-    if (! (ss >> position) ) throw std::invalid_argument("Invalid number");
+    if (! (ss >> position) ) 
+      throw invalid_argument("Invalid numeric value");
     if (position < 0 || position > 100)
-      throw std::invalid_argument("Postion must be in range [0..100]");
+      throw invalid_argument("Position must be floating-point value in range [0..100] (percents)");
   }
 
   if (parse.nonOptionsCount() != 1){
-    stringstream ss; ss<<"Must have 1 arguemnt: input file";
+    stringstream ss; ss<<"Must have 1 argument: input file";
     throw std::invalid_argument(ss.str());
   }
   input_file = parse.nonOption(0);
