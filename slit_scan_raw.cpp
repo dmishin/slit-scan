@@ -1,6 +1,5 @@
 #include <iostream>
 #include <fstream>
-#include <cstdlib>
 #include <sstream>
 #include <stdexcept>
 #include <sstream>
@@ -22,9 +21,11 @@ public:
   SlitOrientation orientation;
   std::ostream &output;
   size_t width, height;
-  size_t frames; 
+  size_t frames;
+  uint8_t *buffer;
 public:
   SlitExtractor( double pos, SlitOrientation o, std::ostream &output_ );
+  ~SlitExtractor();
   virtual bool handle(AVFrame *pFrame, int width, int height, int iFrame);
   int slit_width()const;
   int frames_processed()const{ return frames; };
@@ -46,6 +47,12 @@ SlitExtractor::SlitExtractor(double pos, SlitOrientation o, std::ostream &output
   assert( pos >=0 && pos <= 1.0 );
   frames = 0;
   slit_position = 0;
+  buffer = NULL;
+}
+SlitExtractor::~SlitExtractor()
+{
+  delete[] buffer;
+  buffer = NULL;
 }
 
 bool SlitExtractor::handle(AVFrame *pFrame, int width_, int height_, int iFrame)
@@ -89,7 +96,9 @@ int SlitExtractor::slit_width()const
 }
 void SlitExtractor::extract_vertical(AVFrame *pFrame)
 {
-  uint8_t *buffer = new uint8_t[ height * 3 ];
+  if (buffer == NULL){
+    buffer = new uint8_t[ height * 3 ];
+  }
   size_t frame_pos = slit_position * 3;
   assert( frame_pos < pFrame->linesize[0] );
   size_t buffer_pos = 0;
@@ -100,7 +109,6 @@ void SlitExtractor::extract_vertical(AVFrame *pFrame)
     frame_pos += pFrame->linesize[0];
   }
   output.write((const char*)buffer, height * 3);
-  delete[] buffer;
 }
 void SlitExtractor::extract_horizontal(AVFrame *pFrame)
 {
