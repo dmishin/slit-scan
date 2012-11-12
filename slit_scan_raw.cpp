@@ -34,6 +34,10 @@ private:
   int get_perpendicular_size()const; //size of the frame in direction, perpendicular to the slit
 };
 
+/** Extract file name without extension from the path*/
+std::string base_name( const std::string &path );
+
+
 SlitExtractor::SlitExtractor(double pos, SlitOrientation o, std::ostream &output_)
     :slit_position_rel(pos)
     ,orientation(o)
@@ -114,9 +118,9 @@ const option::Descriptor usage[] =
  {HELP, 0,"", "help",option::Arg::None, 
   "  --help  \tPrint usage and exit." },
  {OUTPUT, 0,"o","output",option::Arg::Optional, 
-  "  --output, -o  \tSpecify output image file (default is output.png)." },
+  "  --output, -o  \tSpecify output image file (default is INPUT_FILE_NAME.png)." },
  {RAW_OUTPUT, 0,"","raw-output",option::Arg::Optional, 
-  "  --raw-output \tSpecify raw output image file (default is output.raw)." },
+  "  --raw-output \tSpecify intermediate raw output image file (default is output.raw)." },
  {POSITION, 0,"p","position",option::Arg::Optional, 
   "  --position, -p  \tSpecify position of the slit (default is 50%)" },
  {ORIENTATION, 0,"-r","orientation",option::Arg::Optional, 
@@ -147,7 +151,6 @@ struct Options{
   string input_file;
   Options()
     :orientation(SlitVertical)
-    ,output("output.png")
     ,raw_output("output.raw")
     ,position(50.0)
   {}
@@ -194,6 +197,12 @@ bool Options::parse(int argc, char *argv[])
   }
   input_file = parse.nonOption(0);
 
+  if (!options[OUTPUT]){
+    output = base_name( input_file ) + ".png";
+    if (output.empty())
+      output = "output.png";
+  }
+
   cout << "Passed options:\n"
        << " Orientaion:"<<orientation<<endl
        << " Position:"<<position<<endl
@@ -201,6 +210,23 @@ bool Options::parse(int argc, char *argv[])
        << " Raw output:"<<raw_output<<endl
        << " Output:"<<output<<endl;
   return true;
+}
+
+/** Extract file name without extension from the path*/
+std::string base_name( const std::string &path )
+{
+  size_t slash_pos = path.rfind('/');
+  size_t dot_pos = path.rfind('.');
+  size_t start_pos, end_pos;
+  if (slash_pos == path.npos)
+    start_pos = 0;
+  else
+    start_pos = slash_pos + 1;
+  if (dot_pos == path.npos || dot_pos <= slash_pos )
+    end_pos = path.size();
+  else
+    end_pos = dot_pos;
+  return path.substr( start_pos, end_pos - start_pos );
 }
 
 int main( int argc, char *argv[] )
