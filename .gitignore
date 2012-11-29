@@ -1,6 +1,6 @@
 *.png
+*.xcf
 *.raw
-*.fifo
 photos/*
 videos/*
 *~
