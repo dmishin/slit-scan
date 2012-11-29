@@ -1,2 +1,5 @@
 #!/bin/bash
-g++ -DNDEBUG -O2 slit_scan_raw.cpp -o converter 
+g++ `pkg-config --libs libavformat libavcodec libswscale libavutil` \
+    -DNDEBUG -O3 \
+    ffmpeg_decoder.cpp slit_scan.cpp \
+    -o slit-scan
