@@ -7,6 +7,7 @@
 
 #include "optionparser.h"
 #include "ffmpeg_decoder.hpp"
+#include "compare_rgb_blocks.hpp"
 
 using namespace std;
 
