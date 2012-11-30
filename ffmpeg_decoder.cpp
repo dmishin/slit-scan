@@ -11,7 +11,7 @@ int process_ffmpeg_file( const char *fname, FrameHandler &handler )
   AVCodecContext  *pCodecCtx = NULL;
   AVCodec         *pCodec = NULL;
   AVFrame         *pFrame = NULL; 
-  AVFrame         *pFrameRGB = NULL;
+  AVFrame         *pFrameRGB0 = NULL, *pFrameRGB1 = NULL, *pFrameRGBOld = NULL;
   AVPacket        packet;
   int             frameFinished;
   int             numBytes;
@@ -58,8 +58,9 @@ int process_ffmpeg_file( const char *fname, FrameHandler &handler )
   pFrame=avcodec_alloc_frame();
   
   // Allocate an AVFrame structure
-  pFrameRGB=avcodec_alloc_frame();
-  if(pFrameRGB==NULL)
+  pFrameRGB0=avcodec_alloc_frame();
+  pFrameRGB1=avcodec_alloc_frame();
+  if(pFrameRGB0==NULL || pFrameRGB1==NULL)
     return -1;
   
   // Determine required buffer size and allocate buffer
@@ -85,10 +86,12 @@ int process_ffmpeg_file( const char *fname, FrameHandler &handler )
   // Assign appropriate parts of buffer to image planes in pFrameRGB
   // Note that pFrameRGB is an AVFrame, but AVFrame is a superset
   // of AVPicture
-  avpicture_fill((AVPicture *)pFrameRGB, buffer, PIX_FMT_RGB24,
+  avpicture_fill((AVPicture *)pFrameRGB0, buffer, PIX_FMT_RGB24,
+		 pCodecCtx->width, pCodecCtx->height);
+  avpicture_fill((AVPicture *)pFrameRGB1, buffer, PIX_FMT_RGB24,
 		 pCodecCtx->width, pCodecCtx->height);
   
-  // Read frames and save first five frames to disk
+  // Read frames
   i=0;
   while(av_read_frame(pFormatCtx, &packet)>=0) {
     // Is this a packet from the video stream?
@@ -107,12 +110,15 @@ int process_ffmpeg_file( const char *fname, FrameHandler &handler )
             pFrame->linesize,
             0,
             pCodecCtx->height,
-            pFrameRGB->data,
-            pFrameRGB->linesize
+            pFrameRGB0->data,
+            pFrameRGB0->linesize
         );
 	// handle the frame
-	if (! handler.handle(pFrameRGB, pCodecCtx->width, pCodecCtx->height, i++) )
+	if (! handler.handle(pFrameRGB0, pFrameRGBOld, pCodecCtx->width, pCodecCtx->height, i++) )
 	  break;
+	pFrameRGBOld = pFrameRGB0;
+	pFrameRGB0 = pFrameRGB1;
+	pFrameRGB1 = pFrameRGBOld;
       }
     }
     
@@ -122,7 +128,8 @@ int process_ffmpeg_file( const char *fname, FrameHandler &handler )
   
   // Free the RGB image
   av_free(buffer);
-  av_free(pFrameRGB);
+  av_free(pFrameRGB1);
+  av_free(pFrameRGB0);
   
   // Free the YUV frame
   av_free(pFrame);

@@ -27,7 +27,7 @@ public:
 public:
   SlitExtractor( double pos, SlitOrientation o, std::ostream &output_ );
   ~SlitExtractor();
-  virtual bool handle(AVFrame *pFrame, int width, int height, int iFrame);
+  virtual bool handle(AVFrame *pFrame, AVFrame *pFrameOld, int width, int height, int iFrame);
   int slit_width()const;
   int frames_processed()const{ return frames; };
 private:
@@ -56,7 +56,7 @@ SlitExtractor::~SlitExtractor()
   buffer = NULL;
 }
 
-bool SlitExtractor::handle(AVFrame *pFrame, int width_, int height_, int iFrame)
+bool SlitExtractor::handle(AVFrame *pFrame, AVFrame *pFrameOld, int width_, int height_, int iFrame)
 {
   if (frames == 0){
     //first frame: perform some initialization
