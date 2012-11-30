@@ -75,7 +75,7 @@ OffsetDeshaker::OffsetDeshaker( int x0_, int y0_, int dx_, int dy_, int w, int h
 {
   dx_accum = 0;
   dy_accum = 0;
-  dissipation_rate = pow( .5, 1.0 / 20 ); //half-return in 20 frames
+  dissipation_rate = 1;//pow( .5, 1.0 / 200 ); //half-return in 20 frames
 }
 
 bool OffsetDeshaker::handle(AVFrame *pFrame, AVFrame *pFrameOld, int fwidth, int fheight, int iFrame)
@@ -177,8 +177,8 @@ void SlitExtractor::extract_vertical(AVFrame *pFrame)
   if ( deshaker ){
     double ddx, ddy;
     deshaker->get_frame_offset(ddx, ddy);
-    dx = (int)round( ddx );
-    dy = (int)round( ddy );
+    dx = -(int)round( ddx );
+    dy = -(int)round( ddy );
   }
   for( int t = 0; t < height; ++t ){
     int bpos = t*3;
@@ -207,8 +207,8 @@ void SlitExtractor::extract_horizontal(AVFrame *pFrame)
   if ( deshaker ){
     double ddx, ddy;
     deshaker->get_frame_offset(ddx, ddy);
-    dx = (int)round( ddx );
-    dy = (int)round( ddy );
+    dx = -(int)round( ddx );
+    dy = -(int)round( ddy );
   }
   for( int t = 0; t < width; ++t ){
     int bpos = t*3;
@@ -367,7 +367,7 @@ int main( int argc, char *argv[] )
   ofstream ostream( options.raw_output.c_str(), ios_base::binary );
 
   SlitExtractor extractor( options.position*0.01, options.orientation, ostream );
-  OffsetDeshaker deshaker( 30, 30, 20, 20, 100, 100 );
+  OffsetDeshaker deshaker( 297, 401, 10, 10, 111, 62 );
   extractor.set_deshaker( &deshaker );
   // Register all formats and codecs
   av_register_all();
