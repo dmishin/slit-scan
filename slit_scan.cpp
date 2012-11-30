@@ -39,6 +39,8 @@ private:
 class OffsetDeshaker: public FrameHandler{
   int x0, y0, dx, dy;
   int width, height;
+  double dx_accum, dy_accum;
+  double dissipation_rate;
 public:
   OffsetDeshaker( int x0, int y0, int dx, int dy, int w, int h );
   virtual ~OffsetDeshaker(){};
@@ -55,6 +57,9 @@ OffsetDeshaker::OffsetDeshaker( int x0_, int y0_, int dx_, int dy_, int w, int h
   :x0(x0_), y0(y0_), dx(dx_), dy(dy_)
   ,width(w), height(h)
 {
+  dx_accum = 0;
+  dy_accum = 0;
+  dissipation_rate = pow( .5, 1.0 / 20 ); //half-return in 20 frames
 }
 
 bool OffsetDeshaker::handle(AVFrame *pFrame, AVFrame *pFrameOld, int fwidth, int fheight, int iFrame)
@@ -70,12 +75,20 @@ bool OffsetDeshaker::handle(AVFrame *pFrame, AVFrame *pFrameOld, int fwidth, int
   }
   
   int deltaX, deltaY;
-    match_blocks( pBlock1, pFrame->linesize[0],
-    pBlock2, pFrameOld->linesize[0],
-    width, height,
-    dx, dy,
-    deltaX, deltaY );
+  match_blocks( pBlock1, pFrame->linesize[0],
+		pBlock2, pFrameOld->linesize[0],
+		width, height,
+		dx, dy,
+		deltaX, deltaY );
+
+  dx_accum *= dissipation_rate;
+  dy_accum *= dissipation_rate;
+  if (true){//add shift condition here
+    dx_accum += deltaX;
+    dy_accum += deltaY;
+  }
   cout << "Frame "<<iFrame<<" dx="<<deltaX<<" dy="<<deltaY<<endl;
+  cout << " dxa = "<<dx_accum<<" dya = "<<dy_accum<<endl;
   return true;
 }
 
