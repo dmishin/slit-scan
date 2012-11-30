@@ -1,8 +1,12 @@
 #include "compare_rgb_blocks.hpp"
+#include <iostream>
+#include <cmath>
 
+using namespace std;
 inline int sqr( int x ){
   return x*x;
 }
+
 double compare_blocks( uint8 *block1, size_t interline1,
 		       uint8 *block2, size_t interline2,
 		       size_t width, size_t height)
@@ -18,7 +22,7 @@ double compare_blocks( uint8 *block1, size_t interline1,
       s += sqr( (int)row1[x+2] - (int)row2[x+2]); //B
     }
   }
-  return s;
+  return sqrt(s / width / height);
 }
 
 void match_blocks( uint8 *block1, size_t interline1,
@@ -28,7 +32,7 @@ void match_blocks( uint8 *block1, size_t interline1,
 		   int &dx_best, int &dy_best)
 {
   bool first = true;
-  double diff_best;
+  double diff_best, diff_worst;
   for ( int x = -dx_range; x <= dx_range; ++x ){
     for ( int y = -dy_range; y <= dy_range; ++y ){
       int offset2 = x*3 + y * interline2;
@@ -39,8 +43,11 @@ void match_blocks( uint8 *block1, size_t interline1,
 	dx_best = x;
 	dy_best = y;
 	diff_best = diff;
-	first = false;
       }
+      if (first || diff > diff_worst)
+	diff_worst = diff;
+      first = false;
     }
   }
+  cout << "Dbest = "<<diff_best<<" Dworst="<<diff_worst<<endl;
 }

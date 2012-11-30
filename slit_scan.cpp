@@ -36,8 +36,48 @@ private:
   int get_perpendicular_size()const; //size of the frame in direction, perpendicular to the slit
 };
 
+class OffsetDeshaker: public FrameHandler{
+  int x0, y0, dx, dy;
+  int width, height;
+public:
+  OffsetDeshaker( int x0, int y0, int dx, int dy, int w, int h );
+  virtual ~OffsetDeshaker(){};
+  virtual bool handle(AVFrame *pFrame, AVFrame *pFrameOld, int width, int height, int iFrame);
+};
+
 /** Extract file name without extension from the path*/
 std::string base_name( const std::string &path );
+
+////////////////////////////////////////////////////////////////////////////////
+// Implementation
+////////////////////////////////////////////////////////////////////////////////
+OffsetDeshaker::OffsetDeshaker( int x0_, int y0_, int dx_, int dy_, int w, int h )
+  :x0(x0_), y0(y0_), dx(dx_), dy(dy_)
+  ,width(w), height(h)
+{
+}
+
+bool OffsetDeshaker::handle(AVFrame *pFrame, AVFrame *pFrameOld, int fwidth, int fheight, int iFrame)
+{
+  if (pFrameOld == NULL) return true;
+
+  uint8_t * pBlock1 = pFrame->data[0] + x0 * 3 + y0 * pFrame->linesize[0];
+  uint8_t * pBlock2 = pFrameOld->data[0] + x0 * 3 + y0 * pFrameOld->linesize[0];
+
+  if (x0-dx < 0 || y0-dy < 0 ||
+      x0+width+dx >=fwidth || y0+height+dy >= fheight){
+    throw std::logic_error("Search block outside of frame");
+  }
+  
+  int deltaX, deltaY;
+    match_blocks( pBlock1, pFrame->linesize[0],
+    pBlock2, pFrameOld->linesize[0],
+    width, height,
+    dx, dy,
+    deltaX, deltaY );
+  cout << "Frame "<<iFrame<<" dx="<<deltaX<<" dy="<<deltaY<<endl;
+  return true;
+}
 
 
 SlitExtractor::SlitExtractor(double pos, SlitOrientation o, std::ostream &output_)
@@ -253,11 +293,11 @@ int main( int argc, char *argv[] )
   ofstream ostream( options.raw_output.c_str(), ios_base::binary );
 
   SlitExtractor extractor( options.position*0.01, options.orientation, ostream );
-
+  OffsetDeshaker deshaker( 30, 30, 20, 20, 100, 100 );
   // Register all formats and codecs
   av_register_all();
   try{
-    process_ffmpeg_file( options.input_file.c_str(), extractor );
+    process_ffmpeg_file( options.input_file.c_str(), deshaker );
   }catch(std::exception &err){
     cerr << "Error processing file:"<<err.what()<<endl;
     return 1;

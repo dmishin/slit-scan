@@ -60,7 +60,7 @@ int process_ffmpeg_file( const char *fname, FrameHandler &handler )
   // Allocate an AVFrame structure
   pFrameRGB0=avcodec_alloc_frame();
   pFrameRGB1=avcodec_alloc_frame();
-  if(pFrameRGB0==NULL || pFrameRGB1==NULL)
+  if(pFrameRGB0==NULL || pFrameRGB1==NULL || pFrameRGB1 == pFrameRGB0)
     return -1;
   
   // Determine required buffer size and allocate buffer
