@@ -14,6 +14,12 @@ using namespace std;
 enum SlitOrientation{
   SlitVertical, SlitHorizontal
 };
+class OffsetDeshaker;
+
+class AbstractOffsetDeshaker: public FrameHandler{
+public:
+  virtual void get_frame_offset( double &dx, double &dy )=0;
+};
 
 class SlitExtractor: public FrameHandler{
 public:
@@ -24,19 +30,21 @@ public:
   size_t width, height;
   size_t frames;
   uint8_t *buffer;
+  AbstractOffsetDeshaker *deshaker;
 public:
   SlitExtractor( double pos, SlitOrientation o, std::ostream &output_ );
   ~SlitExtractor();
   virtual bool handle(AVFrame *pFrame, AVFrame *pFrameOld, int width, int height, int iFrame);
   int slit_width()const;
   int frames_processed()const{ return frames; };
+  void set_deshaker( AbstractOffsetDeshaker *d){ deshaker = d; };
 private:
   void extract_vertical(AVFrame *pFrame);
   void extract_horizontal(AVFrame *pFrame);
   int get_perpendicular_size()const; //size of the frame in direction, perpendicular to the slit
 };
 
-class OffsetDeshaker: public FrameHandler{
+class OffsetDeshaker: public AbstractOffsetDeshaker{
   int x0, y0, dx, dy;
   int width, height;
   double dx_accum, dy_accum;
@@ -45,7 +53,9 @@ public:
   OffsetDeshaker( int x0, int y0, int dx, int dy, int w, int h );
   virtual ~OffsetDeshaker(){};
   virtual bool handle(AVFrame *pFrame, AVFrame *pFrameOld, int width, int height, int iFrame);
+  virtual void get_frame_offset( double &dx, double &dy );
 };
+
 
 /** Extract file name without extension from the path*/
 std::string base_name( const std::string &path );
@@ -53,6 +63,12 @@ std::string base_name( const std::string &path );
 ////////////////////////////////////////////////////////////////////////////////
 // Implementation
 ////////////////////////////////////////////////////////////////////////////////
+void OffsetDeshaker::get_frame_offset( double &dx, double &dy )
+{
+  dx = dx_accum;
+  dy = dy_accum;
+}
+
 OffsetDeshaker::OffsetDeshaker( int x0_, int y0_, int dx_, int dy_, int w, int h )
   :x0(x0_), y0(y0_), dx(dx_), dy(dy_)
   ,width(w), height(h)
@@ -75,11 +91,13 @@ bool OffsetDeshaker::handle(AVFrame *pFrame, AVFrame *pFrameOld, int fwidth, int
   }
   
   int deltaX, deltaY;
+  double d, dworst;
   match_blocks( pBlock1, pFrame->linesize[0],
 		pBlock2, pFrameOld->linesize[0],
 		width, height,
 		dx, dy,
-		deltaX, deltaY );
+		deltaX, deltaY,
+		d, dworst);
 
   dx_accum *= dissipation_rate;
   dy_accum *= dissipation_rate;
@@ -87,7 +105,8 @@ bool OffsetDeshaker::handle(AVFrame *pFrame, AVFrame *pFrameOld, int fwidth, int
     dx_accum += deltaX;
     dy_accum += deltaY;
   }
-  cout << "Frame "<<iFrame<<" dx="<<deltaX<<" dy="<<deltaY<<endl;
+  //cout << "Frame "<<iFrame<<" dx="<<deltaX<<" dy="<<deltaY<<endl;
+  cout << "Dbest = "<<d<<" Dworst="<<dworst<<" Rate:"<<dworst / d<<endl;
   cout << " dxa = "<<dx_accum<<" dya = "<<dy_accum<<endl;
   return true;
 }
@@ -111,6 +130,7 @@ SlitExtractor::~SlitExtractor()
 
 bool SlitExtractor::handle(AVFrame *pFrame, AVFrame *pFrameOld, int width_, int height_, int iFrame)
 {
+  if (deshaker) deshaker->handle( pFrame, pFrameOld, width_, height_, iFrame);
   if (frames == 0){
     //first frame: perform some initialization
     width = width_;
@@ -153,25 +173,64 @@ void SlitExtractor::extract_vertical(AVFrame *pFrame)
   if (buffer == NULL){
     buffer = new uint8_t[ height * 3 ];
   }
-  size_t frame_pos = slit_position * 3;
-  assert( frame_pos < pFrame->linesize[0] );
-  size_t buffer_pos = 0;
-  for( int y = 0; y < height; ++y ){
-    buffer[buffer_pos++] = pFrame->data[0][frame_pos];
-    buffer[buffer_pos++] = pFrame->data[0][frame_pos+1];
-    buffer[buffer_pos++] = pFrame->data[0][frame_pos+2];
-    frame_pos += pFrame->linesize[0];
+  int dx=0, dy=0;
+  if ( deshaker ){
+    double ddx, ddy;
+    deshaker->get_frame_offset(ddx, ddy);
+    dx = (int)round( ddx );
+    dy = (int)round( ddy );
+  }
+  for( int t = 0; t < height; ++t ){
+    int bpos = t*3;
+    int x = slit_position + dx;
+    int y = t + dy;
+    if ( x < 0 || x >= width || y < 0 || y >= height ){
+      buffer[bpos] = 0;
+      buffer[bpos+1] = 0;
+      buffer[bpos+2] = 0;
+    }else{
+      int fpos = x * 3 + y * pFrame->linesize[0];
+
+      buffer[bpos] = pFrame->data[0][fpos];
+      buffer[bpos+1] = pFrame->data[0][fpos+1];
+      buffer[bpos+2] = pFrame->data[0][fpos+2];
+    }
   }
   output.write((const char*)buffer, height * 3);
 }
 void SlitExtractor::extract_horizontal(AVFrame *pFrame)
 {
-  output.write((const char *)(pFrame->data[0] + 
-			      pFrame->linesize[0] * slit_position), 
-	       width * 3);
+  if (buffer == NULL){
+    buffer = new uint8_t[ width * 3 ];
+  }
+  int dx=0, dy=0;
+  if ( deshaker ){
+    double ddx, ddy;
+    deshaker->get_frame_offset(ddx, ddy);
+    dx = (int)round( ddx );
+    dy = (int)round( ddy );
+  }
+  for( int t = 0; t < width; ++t ){
+    int bpos = t*3;
+    int x = t + dx;
+    int y = slit_position + dy;
+    if ( x < 0 || x >= width || y < 0 || y >= height ){
+      buffer[bpos] = 0;
+      buffer[bpos+1] = 0;
+      buffer[bpos+2] = 0;
+    }else{
+      int fpos = x * 3 + y * pFrame->linesize[0];
+
+      buffer[bpos] = pFrame->data[0][fpos];
+      buffer[bpos+1] = pFrame->data[0][fpos+1];
+      buffer[bpos+2] = pFrame->data[0][fpos+2];
+    }
+  }
+
+  output.write((const char*)buffer, width * 3);
 }
 
-enum  optionIndex { UNKNOWN, HELP, OUTPUT, RAW_OUTPUT, ORIENTATION, POSITION };
+enum  optionIndex { UNKNOWN, HELP, OUTPUT, RAW_OUTPUT, ORIENTATION, POSITION, STABILIZE };
 
 const option::Descriptor usage[] =
 {
@@ -187,6 +246,8 @@ const option::Descriptor usage[] =
   "  --position, -p  \tSpecify position of the slit (default is 50%)" },
  {ORIENTATION, 0,"-r","orientation",option::Arg::Optional, 
   "  --orientation, -r  \tSlit orientation: vertical | v | horizontal | h." },
+ {STABILIZE, 0, "-s", "stabilize", option::Arg::Optional,
+  "  --stabilize, -s \tUse simple image stabilization to reduce shaking"},
 
  {0,0,0,0,0,0}
 };
@@ -307,10 +368,11 @@ int main( int argc, char *argv[] )
 
   SlitExtractor extractor( options.position*0.01, options.orientation, ostream );
   OffsetDeshaker deshaker( 30, 30, 20, 20, 100, 100 );
+  extractor.set_deshaker( &deshaker );
   // Register all formats and codecs
   av_register_all();
   try{
-    process_ffmpeg_file( options.input_file.c_str(), deshaker );
+    process_ffmpeg_file( options.input_file.c_str(), extractor );
   }catch(std::exception &err){
     cerr << "Error processing file:"<<err.what()<<endl;
     return 1;
