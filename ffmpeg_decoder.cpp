@@ -15,7 +15,7 @@ int process_ffmpeg_file( const char *fname, FrameHandler &handler )
   AVPacket        packet;
   int             frameFinished;
   int             numBytes;
-  uint8_t         *buffer = NULL;
+  uint8_t         *buffer0 = NULL, *buffer1 = NULL;
 
   AVDictionary    *optionsDict = NULL;
   struct SwsContext      *sws_ctx = NULL;
@@ -66,7 +66,8 @@ int process_ffmpeg_file( const char *fname, FrameHandler &handler )
   // Determine required buffer size and allocate buffer
   numBytes=avpicture_get_size(PIX_FMT_RGB24, pCodecCtx->width,
 			      pCodecCtx->height);
-  buffer=(uint8_t *)av_malloc(numBytes*sizeof(uint8_t));
+  buffer0=(uint8_t *)av_malloc(numBytes*sizeof(uint8_t));
+  buffer1=(uint8_t *)av_malloc(numBytes*sizeof(uint8_t));
 
   sws_ctx =
     sws_getContext
@@ -86,9 +87,9 @@ int process_ffmpeg_file( const char *fname, FrameHandler &handler )
   // Assign appropriate parts of buffer to image planes in pFrameRGB
   // Note that pFrameRGB is an AVFrame, but AVFrame is a superset
   // of AVPicture
-  avpicture_fill((AVPicture *)pFrameRGB0, buffer, PIX_FMT_RGB24,
+  avpicture_fill((AVPicture *)pFrameRGB0, buffer0, PIX_FMT_RGB24,
 		 pCodecCtx->width, pCodecCtx->height);
-  avpicture_fill((AVPicture *)pFrameRGB1, buffer, PIX_FMT_RGB24,
+  avpicture_fill((AVPicture *)pFrameRGB1, buffer1, PIX_FMT_RGB24,
 		 pCodecCtx->width, pCodecCtx->height);
   
   // Read frames
@@ -114,6 +115,9 @@ int process_ffmpeg_file( const char *fname, FrameHandler &handler )
             pFrameRGB0->linesize
         );
 	// handle the frame
+	if (pFrameRGBOld && pFrameRGB0->data[0] == pFrameRGBOld->data[0]){
+	  return -1;
+	}
 	if (! handler.handle(pFrameRGB0, pFrameRGBOld, pCodecCtx->width, pCodecCtx->height, i++) )
 	  break;
 	pFrameRGBOld = pFrameRGB0;
@@ -127,7 +131,8 @@ int process_ffmpeg_file( const char *fname, FrameHandler &handler )
   }
   
   // Free the RGB image
-  av_free(buffer);
+  av_free(buffer0);
+  av_free(buffer1);
   av_free(pFrameRGB1);
   av_free(pFrameRGB0);
   
@@ -139,7 +144,7 @@ int process_ffmpeg_file( const char *fname, FrameHandler &handler )
   
   // Close the video file
   avformat_close_input(&pFormatCtx);
-  
+  return 1;
 }
 			    
 

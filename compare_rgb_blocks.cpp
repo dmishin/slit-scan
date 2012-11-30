@@ -31,6 +31,9 @@ void match_blocks( uint8 *block1, size_t interline1,
 		   int dx_range, int dy_range,
 		   int &dx_best, int &dy_best)
 {
+  if (block1 == block2){
+    cerr << "Blocks refer the same area"<<endl;
+  };
   bool first = true;
   double diff_best, diff_worst;
   for ( int x = -dx_range; x <= dx_range; ++x ){
