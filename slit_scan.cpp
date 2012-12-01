@@ -4,6 +4,7 @@
 #include <stdexcept>
 #include <sstream>
 #include <cassert>
+#include <vector>
 
 #include "optionparser.h"
 #include "ffmpeg_decoder.hpp"
@@ -44,13 +45,18 @@ private:
   int get_perpendicular_size()const; //size of the frame in direction, perpendicular to the slit
 };
 
+
+const int default_stab_range_y = 10;
+const int default_stab_range_x = 10;
+const int default_relaxation_frames = 200;
+
 class OffsetDeshaker: public AbstractOffsetDeshaker{
   int x0, y0, dx, dy;
   int width, height;
   double dx_accum, dy_accum;
   double dissipation_rate;
 public:
-  OffsetDeshaker( int x0, int y0, int dx, int dy, int w, int h );
+  OffsetDeshaker( int x0, int y0, int dx, int dy, int w, int h, int half_return_time );
   virtual ~OffsetDeshaker(){};
   virtual bool handle(AVFrame *pFrame, AVFrame *pFrameOld, int width, int height, int iFrame);
   virtual void get_frame_offset( double &dx, double &dy );
@@ -69,13 +75,17 @@ void OffsetDeshaker::get_frame_offset( double &dx, double &dy )
   dy = dy_accum;
 }
 
-OffsetDeshaker::OffsetDeshaker( int x0_, int y0_, int dx_, int dy_, int w, int h )
+OffsetDeshaker::OffsetDeshaker( int x0_, int y0_, int dx_, int dy_, int w, int h, int half_return_time )
   :x0(x0_), y0(y0_), dx(dx_), dy(dy_)
   ,width(w), height(h)
 {
   dx_accum = 0;
   dy_accum = 0;
-  dissipation_rate = 1;//pow( .5, 1.0 / 200 ); //half-return in 20 frames
+  if (half_return_time == 0){
+    dissipation_rate = 1;
+  }else{
+    dissipation_rate = pow( .5, 1.0 / half_return_time );
+  }
 }
 
 bool OffsetDeshaker::handle(AVFrame *pFrame, AVFrame *pFrameOld, int fwidth, int fheight, int iFrame)
@@ -105,9 +115,8 @@ bool OffsetDeshaker::handle(AVFrame *pFrame, AVFrame *pFrameOld, int fwidth, int
     dx_accum += deltaX;
     dy_accum += deltaY;
   }
-  //cout << "Frame "<<iFrame<<" dx="<<deltaX<<" dy="<<deltaY<<endl;
-  cout << "Dbest = "<<d<<" Dworst="<<dworst<<" Rate:"<<dworst / d<<endl;
-  cout << " dxa = "<<dx_accum<<" dya = "<<dy_accum<<endl;
+  cout <<iFrame<< "Rate:"<<dworst / d
+       << " dxa = "<<dx_accum<<" dya = "<<dy_accum<<endl;
   return true;
 }
 
@@ -122,6 +131,7 @@ SlitExtractor::SlitExtractor(double pos, SlitOrientation o, std::ostream &output
   slit_position = 0;
   buffer = NULL;
 }
+
 SlitExtractor::~SlitExtractor()
 {
   delete[] buffer;
@@ -229,7 +239,17 @@ void SlitExtractor::extract_horizontal(AVFrame *pFrame)
 
   output.write((const char*)buffer, width * 3);
 }
-
+/*
+void read_interpolated( AVFrame * rgb_frame, double x, double y,
+			uint8_t *rgb )
+{
+  int ix = (int)floor(x);
+  int iy = (int)floor(y);
+  double px = x - floor(x);
+  double py = y - floor(y);
+  
+}
+*/
 enum  optionIndex { UNKNOWN, HELP, OUTPUT, RAW_OUTPUT, ORIENTATION, POSITION, STABILIZE };
 
 const option::Descriptor usage[] =
@@ -267,17 +287,33 @@ const char * null_to_empty( const char * s )
   else return s;
 }
 struct Options{
+  struct Box{
+    int x, y, w, h;
+  };
   SlitOrientation orientation;
   string output;
   string raw_output;
   double position;
   string input_file;
+
+  //stabilization options
+  bool stabilize; //enable or disable
+  Box stabilize_box; //box
+  int stabilize_search_range_x, stabilize_search_range_y; //search range
+  int stabilize_relaxation_frames; //
+
   Options()
     :orientation(SlitVertical)
     ,raw_output("output.raw")
     ,position(50.0)
+    ,stabilize(false)
+    ,stabilize_search_range_x(10)
+    ,stabilize_search_range_y(10)
+    ,stabilize_relaxation_frames(200)
   {}
   bool parse( int argc, char *argv[] );
+private:
+  void parse_stabilization_options( const char *opts );
 };
 
 bool Options::parse(int argc, char *argv[])
@@ -314,6 +350,9 @@ bool Options::parse(int argc, char *argv[])
     if (position < 0 || position > 100)
       throw invalid_argument("Position must be floating-point value in range [0..100] (percents)");
   }
+  if (options[STABILIZE]){
+    parse_stabilization_options(null_to_empty(options[POSITION].last()->arg));
+  }
 
   if (parse.nonOptionsCount() != 1){
     stringstream ss; ss<<"Must have 1 argument: input file";
@@ -333,7 +372,69 @@ bool Options::parse(int argc, char *argv[])
        << " Input:"<<input_file<<endl
        << " Raw output:"<<raw_output<<endl
        << " Output:"<<output<<endl;
+  if (stabilize){
+    cout << " Stabilization enabled. Box:"<<endl
+	 << " x0:"<<stabilize_box.x<<" y0:"<<stabilize_box.y<<" w:"<<stabilize_box.w<<" h:"<<stabilize_box.h<<endl;
+  }
   return true;
+}
+
+int str2int( const std::string &s, int default_, bool raise_error )
+{
+  std::stringstream ss(s);
+  int rval;
+  if (s.empty()){
+    if (raise_error)
+      throw std::invalid_argument("Numeric value is required");
+    else
+      return default_;
+  }
+  if (! (ss >> rval)){
+    throw std::invalid_argument("Failed to parse numeric value");
+  }
+  return rval;
+}
+
+size_t split_by( const std::string s, char sep, std::vector<std::string> &parts )
+{
+  using namespace std;
+  size_t count = 0;
+  size_t pos = 0;
+  while (pos < s.size()){
+    size_t sep_pos = s.find(sep, pos);
+    count ++;
+    if (sep_pos == s.npos){
+      parts.push_back( s.substr( pos ) );
+      break;
+    }else{
+      parts.push_back( s.substr( pos, sep_pos - pos ) );
+      pos = sep_pos + 1;
+    }
+  }
+  return count;
+}
+void Options::parse_stabilization_options( const char * sopts )
+{
+  //sopts is a :-separated list of integers:
+  // x0:y0:w:h:rx:ry:reltime
+  //
+  // first 4 are required; other are optional
+  std::vector<std::string> parts;
+  split_by( sopts, ':', parts );
+  if (parts.size() > 7)
+    throw std::invalid_argument( "Stabilization options must have at most 7 values" );
+  if (parts.size() < 4)
+    throw std::invalid_argument( "Stabilization options must have at least 4 values: x0:y0:w:h:range_x:range_y" );
+  stabilize = true;
+
+  stabilize_box.x = str2int( parts[0], 0, true );
+  stabilize_box.y = str2int( parts[1], 0, true );
+  stabilize_box.w = str2int( parts[2], 0, true );
+  stabilize_box.h = str2int( parts[3], 0, true );
+
+  stabilize_search_range_x = str2int( parts[4], default_stab_range_x, false );
+  stabilize_search_range_y = str2int( parts[5], default_stab_range_y, false );
+  stabilize_relaxation_frames = str2int( parts[5], default_relaxation_frames, false );
 }
 
 /** Extract file name without extension from the path*/
@@ -367,8 +468,15 @@ int main( int argc, char *argv[] )
   ofstream ostream( options.raw_output.c_str(), ios_base::binary );
 
   SlitExtractor extractor( options.position*0.01, options.orientation, ostream );
-  OffsetDeshaker deshaker( 297, 401, 10, 10, 111, 62 );
-  extractor.set_deshaker( &deshaker );
+  OffsetDeshaker * deshaker = NULL;
+  if ( options.stabilize ){
+    deshaker = new 
+      OffsetDeshaker(options.stabilize_box.x, options.stabilize_box.y, 
+		     options.stabilize_search_range_x, options.stabilize_search_range_y, 
+		     options.stabilize_box.w, options.stabilize_box.h,
+		     options.stabilize_relaxation_frames );
+    extractor.set_deshaker( deshaker );
+  }
   // Register all formats and codecs
   av_register_all();
   try{
@@ -382,6 +490,7 @@ int main( int argc, char *argv[] )
     cerr << "No frames were processed"<<endl;
     return 1;
   }
+  delete deshaker; deshaker = NULL;
   //convert -size 360x1072 -depth 8 rgb:output_raw.data -transpose  image.jpg
   stringstream command;
   command << "convert -size "<<extractor.slit_width()<<"x"<<extractor.frames_processed()
