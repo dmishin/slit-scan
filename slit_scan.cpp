@@ -267,7 +267,7 @@ const option::Descriptor usage[] =
  {ORIENTATION, 0,"-r","orientation",option::Arg::Optional, 
   "  --orientation, -r  \tSlit orientation: vertical | v | horizontal | h." },
  {STABILIZE, 0, "-s", "stabilize", option::Arg::Optional,
-  "  --stabilize, -s \tUse simple image stabilization to reduce shaking"},
+  "  --stabilize, -s \tUse simple image stabilization to reduce shaking. Format: x:y:w:h[:rx:ry:relax_frames]"},
 
  {0,0,0,0,0,0}
 };
@@ -351,7 +351,7 @@ bool Options::parse(int argc, char *argv[])
       throw invalid_argument("Position must be floating-point value in range [0..100] (percents)");
   }
   if (options[STABILIZE]){
-    parse_stabilization_options(null_to_empty(options[POSITION].last()->arg));
+    parse_stabilization_options(null_to_empty(options[STABILIZE].last()->arg));
   }
 
   if (parse.nonOptionsCount() != 1){
@@ -374,7 +374,9 @@ bool Options::parse(int argc, char *argv[])
        << " Output:"<<output<<endl;
   if (stabilize){
     cout << " Stabilization enabled. Box:"<<endl
-	 << " x0:"<<stabilize_box.x<<" y0:"<<stabilize_box.y<<" w:"<<stabilize_box.w<<" h:"<<stabilize_box.h<<endl;
+	 << " x0:"<<stabilize_box.x<<" y0:"<<stabilize_box.y<<" w:"<<stabilize_box.w<<" h:"<<stabilize_box.h<<endl
+	 << " range x:"<<stabilize_search_range_x<<" y:"<<stabilize_search_range_y<<endl
+	 << " Relax in "<<stabilize_relaxation_frames<<" frames"<<endl;
   }
   return true;
 }
@@ -423,8 +425,12 @@ void Options::parse_stabilization_options( const char * sopts )
   split_by( sopts, ':', parts );
   if (parts.size() > 7)
     throw std::invalid_argument( "Stabilization options must have at most 7 values" );
-  if (parts.size() < 4)
-    throw std::invalid_argument( "Stabilization options must have at least 4 values: x0:y0:w:h:range_x:range_y" );
+  if (parts.size() < 4){
+    stringstream msg;
+    msg << "Stabilization options must have at least 4 values: x0:y0:w:h:range_x:range_y ";
+    msg << parts.size() << " parsed instead: " << sopts;
+    throw std::invalid_argument( msg.str() );
+  }
   stabilize = true;
 
   stabilize_box.x = str2int( parts[0], 0, true );
@@ -432,9 +438,12 @@ void Options::parse_stabilization_options( const char * sopts )
   stabilize_box.w = str2int( parts[2], 0, true );
   stabilize_box.h = str2int( parts[3], 0, true );
 
+  if (parts.size() >= 5)
   stabilize_search_range_x = str2int( parts[4], default_stab_range_x, false );
+  if (parts.size() >= 6)
   stabilize_search_range_y = str2int( parts[5], default_stab_range_y, false );
-  stabilize_relaxation_frames = str2int( parts[5], default_relaxation_frames, false );
+  if (parts.size() >= 7)
+  stabilize_relaxation_frames = str2int( parts[6], default_relaxation_frames, false );
 }
 
 /** Extract file name without extension from the path*/
