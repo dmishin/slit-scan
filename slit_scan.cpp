@@ -8,18 +8,18 @@
 
 #include "optionparser.h"
 #include "ffmpeg_decoder.hpp"
-#include "compare_rgb_blocks.hpp"
+//#include "keyframe_deshaker.hpp"
+#include "offset_deshaker.hpp"
+
+const int default_stab_range_y = 10;
+const int default_stab_range_x = 10;
+const int default_relaxation_frames = 200;
+
 
 using namespace std;
 
 enum SlitOrientation{
   SlitVertical, SlitHorizontal
-};
-class OffsetDeshaker;
-
-class AbstractOffsetDeshaker: public FrameHandler{
-public:
-  virtual void get_frame_offset( double &dx, double &dy )=0;
 };
 
 class SlitExtractor: public FrameHandler{
@@ -46,81 +46,12 @@ private:
 };
 
 
-const int default_stab_range_y = 10;
-const int default_stab_range_x = 10;
-const int default_relaxation_frames = 200;
-
-class OffsetDeshaker: public AbstractOffsetDeshaker{
-  int x0, y0, dx, dy;
-  int width, height;
-  double dx_accum, dy_accum;
-  double dissipation_rate;
-public:
-  OffsetDeshaker( int x0, int y0, int dx, int dy, int w, int h, int half_return_time );
-  virtual ~OffsetDeshaker(){};
-  virtual bool handle(AVFrame *pFrame, AVFrame *pFrameOld, int width, int height, int iFrame);
-  virtual void get_frame_offset( double &dx, double &dy );
-};
-
-
 /** Extract file name without extension from the path*/
 std::string base_name( const std::string &path );
 
 ////////////////////////////////////////////////////////////////////////////////
 // Implementation
 ////////////////////////////////////////////////////////////////////////////////
-void OffsetDeshaker::get_frame_offset( double &dx, double &dy )
-{
-  dx = dx_accum;
-  dy = dy_accum;
-}
-
-OffsetDeshaker::OffsetDeshaker( int x0_, int y0_, int dx_, int dy_, int w, int h, int half_return_time )
-  :x0(x0_), y0(y0_), dx(dx_), dy(dy_)
-  ,width(w), height(h)
-{
-  dx_accum = 0;
-  dy_accum = 0;
-  if (half_return_time == 0){
-    dissipation_rate = 1;
-  }else{
-    dissipation_rate = pow( .5, 1.0 / half_return_time );
-  }
-}
-
-bool OffsetDeshaker::handle(AVFrame *pFrame, AVFrame *pFrameOld, int fwidth, int fheight, int iFrame)
-{
-  if (pFrameOld == NULL) return true;
-
-  uint8_t * pBlock1 = pFrame->data[0] + x0 * 3 + y0 * pFrame->linesize[0];
-  uint8_t * pBlock2 = pFrameOld->data[0] + x0 * 3 + y0 * pFrameOld->linesize[0];
-
-  if (x0-dx < 0 || y0-dy < 0 ||
-      x0+width+dx >=fwidth || y0+height+dy >= fheight){
-    throw std::logic_error("Search block outside of frame");
-  }
-  
-  int deltaX, deltaY;
-  double d, dworst;
-  match_blocks( pBlock1, pFrame->linesize[0],
-		pBlock2, pFrameOld->linesize[0],
-		width, height,
-		dx, dy,
-		deltaX, deltaY,
-		d, dworst);
-
-  dx_accum *= dissipation_rate;
-  dy_accum *= dissipation_rate;
-  if (true){//add shift condition here
-    dx_accum += deltaX;
-    dy_accum += deltaY;
-  }
-  cout <<iFrame<< "Rate:"<<dworst / d
-       << " dxa = "<<dx_accum<<" dya = "<<dy_accum<<endl;
-  return true;
-}
-
-
 SlitExtractor::SlitExtractor(double pos, SlitOrientation o, std::ostream &output_)
     :slit_position_rel(pos)
     ,orientation(o)
