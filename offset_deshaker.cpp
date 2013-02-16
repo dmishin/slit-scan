@@ -16,6 +16,8 @@ OffsetDeshaker::OffsetDeshaker( int x0_, int y0_, int dx_, int dy_, int w, int h
 {
   dx_accum = 0;
   dy_accum = 0;
+  dx_old = 0;
+  dy_old = 0;
   if (half_return_time == 0){
     dissipation_rate = 1;
   }else{
@@ -56,7 +58,6 @@ bool OffsetDeshaker::handle(AVFrame *pFrame, int fwidth, int fheight, int iFrame
   
   int deltaX, deltaY;
   double d, dworst;
-  copy_key_frame(pFrame, fheight);
   match_blocks( pBlock1, pFrame->linesize[0],
 		pBlock2, pFrame->linesize[0],
 		width, height,
@@ -67,8 +68,17 @@ bool OffsetDeshaker::handle(AVFrame *pFrame, int fwidth, int fheight, int iFrame
   dx_accum *= dissipation_rate;
   dy_accum *= dissipation_rate;
   if (true){//add shift condition here
-    dx_accum += deltaX;
-    dy_accum += deltaY;
+    dx_accum += (deltaX - dx_old);
+    dy_accum += (deltaY - dy_old);
+  }
+  if (abs(deltaX) + 1 >= dx || abs(deltaY) + 1 >= dy ){
+    cout << "Frame copy!" <<endl;
+    copy_key_frame(pFrame, fheight);
+    dx_old = 0;
+    dy_old = 0;
+  }else{
+    dx_old = deltaX;
+    dy_old = deltaY;
   }
   cout << iFrame 
        << " Rate:" << dworst / d

@@ -5,6 +5,7 @@
 class OffsetDeshaker: public AbstractOffsetDeshaker{
   int x0, y0, dx, dy;
   int width, height;
+  int dx_old, dy_old;
   double dx_accum, dy_accum;
   double dissipation_rate;
   uint8_t * key_frame;
