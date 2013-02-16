@@ -14,6 +14,6 @@ public:
   virtual bool handle(AVFrame *pFrame, int width, int height, int iFrame)=0;
 };
 
-int process_ffmpeg_file( const char *fname, FrameHandler &handler );
+int process_ffmpeg_file( const char *fname, FrameHandler &handler, int scale );
 
 #endif

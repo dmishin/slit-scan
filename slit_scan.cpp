@@ -181,7 +181,7 @@ void read_interpolated( AVFrame * rgb_frame, double x, double y,
   
 }
 */
-enum  optionIndex { UNKNOWN, HELP, OUTPUT, RAW_OUTPUT, ORIENTATION, POSITION, STABILIZE };
+  enum  optionIndex { UNKNOWN, HELP, OUTPUT, RAW_OUTPUT, ORIENTATION, POSITION, STABILIZE, SCALE };
 
 const option::Descriptor usage[] =
 {
@@ -199,6 +199,8 @@ const option::Descriptor usage[] =
   "  --orientation, -r  \tSlit orientation: vertical | v | horizontal | h." },
  {STABILIZE, 0, "-s", "stabilize", option::Arg::Optional,
   "  --stabilize, -s \tUse simple image stabilization to reduce shaking. Format: x:y:w:h[:rx:ry:relax_frames]"},
+ {SCALE, 0, "-k", "scale", option::Arg::Optional,
+  "  --scale, -k \t. Scale image before applying deshake. Integer 1..4"},
 
  {0,0,0,0,0,0}
 };
@@ -226,6 +228,7 @@ struct Options{
   string raw_output;
   double position;
   string input_file;
+  int scale;
 
   //stabilization options
   bool stabilize; //enable or disable
@@ -241,6 +244,7 @@ struct Options{
     ,stabilize_search_range_x(10)
     ,stabilize_search_range_y(10)
     ,stabilize_relaxation_frames(200)
+    ,scale(1)
   {}
   bool parse( int argc, char *argv[] );
 private:
@@ -281,6 +285,13 @@ bool Options::parse(int argc, char *argv[])
     if (position < 0 || position > 100)
       throw invalid_argument("Position must be floating-point value in range [0..100] (percents)");
   }
+  if (options[SCALE]){
+    stringstream ss(null_to_empty(options[POSITION].last()->arg)); 
+    if (! (ss >> scale) )
+      throw invalid_argument("Scale incorrect");
+    if (scale < 1 || scale > 4)
+      throw invalid_argument("Scale must be in range 1..4");
+  }
   if (options[STABILIZE]){
     parse_stabilization_options(null_to_empty(options[STABILIZE].last()->arg));
   }
@@ -302,7 +313,9 @@ bool Options::parse(int argc, char *argv[])
        << " Position:"<<position<<endl
        << " Input:"<<input_file<<endl
        << " Raw output:"<<raw_output<<endl
-       << " Output:"<<output<<endl;
+       << " Output:"<<output<<endl
+       << " Scale:"<<scale<<endl;
+  
   if (stabilize){
     cout << " Stabilization enabled. Box:"<<endl
 	 << " x0:"<<stabilize_box.x<<" y0:"<<stabilize_box.y<<" w:"<<stabilize_box.w<<" h:"<<stabilize_box.h<<endl
@@ -410,17 +423,18 @@ int main( int argc, char *argv[] )
   SlitExtractor extractor( options.position*0.01, options.orientation, ostream );
   OffsetDeshaker * deshaker = NULL;
   if ( options.stabilize ){
+    int s = options.scale;
     deshaker = new 
-      OffsetDeshaker(options.stabilize_box.x, options.stabilize_box.y, 
-		     options.stabilize_search_range_x, options.stabilize_search_range_y, 
-		     options.stabilize_box.w, options.stabilize_box.h,
+      OffsetDeshaker(options.stabilize_box.x*s, options.stabilize_box.y*s, 
+		     options.stabilize_search_range_x*s, options.stabilize_search_range_y*s, 
+		     options.stabilize_box.w*s, options.stabilize_box.h*s,
 		     options.stabilize_relaxation_frames );
     extractor.set_deshaker( deshaker );
   }
   // Register all formats and codecs
   av_register_all();
   try{
-    process_ffmpeg_file( options.input_file.c_str(), extractor );
+    process_ffmpeg_file( options.input_file.c_str(), extractor, options.scale );
   }catch(std::exception &err){
     cerr << "Error processing file:"<<err.what()<<endl;
     return 1;

@@ -4,7 +4,7 @@
 
 #include <stdio.h>
 
-int process_ffmpeg_file( const char *fname, FrameHandler &handler )
+int process_ffmpeg_file( const char *fname, FrameHandler &handler, int scale )
 {
   AVFormatContext *pFormatCtx = NULL;
   int             i, videoStream;
@@ -16,7 +16,6 @@ int process_ffmpeg_file( const char *fname, FrameHandler &handler )
   int             frameFinished;
   int             numBytes;
   uint8_t         *buffer0 = NULL, *buffer1 = NULL;
-
   AVDictionary    *optionsDict = NULL;
   struct SwsContext      *sws_ctx = NULL;
   
@@ -64,8 +63,8 @@ int process_ffmpeg_file( const char *fname, FrameHandler &handler )
     return -1;
   
   // Determine required buffer size and allocate buffer
-  numBytes=avpicture_get_size(PIX_FMT_RGB24, pCodecCtx->width,
-			      pCodecCtx->height);
+  numBytes=avpicture_get_size(PIX_FMT_RGB24, pCodecCtx->width*scale,
+			      pCodecCtx->height*scale);
   buffer0=(uint8_t *)av_malloc(numBytes*sizeof(uint8_t));
   buffer1=(uint8_t *)av_malloc(numBytes*sizeof(uint8_t));
 
@@ -75,8 +74,8 @@ int process_ffmpeg_file( const char *fname, FrameHandler &handler )
         pCodecCtx->width,
         pCodecCtx->height,
         pCodecCtx->pix_fmt,
-        pCodecCtx->width,
-        pCodecCtx->height,
+        pCodecCtx->width*scale,
+        pCodecCtx->height*scale,
         PIX_FMT_RGB24,
         SWS_BILINEAR,
         NULL,
@@ -88,9 +87,9 @@ int process_ffmpeg_file( const char *fname, FrameHandler &handler )
   // Note that pFrameRGB is an AVFrame, but AVFrame is a superset
   // of AVPicture
   avpicture_fill((AVPicture *)pFrameRGB0, buffer0, PIX_FMT_RGB24,
-		 pCodecCtx->width, pCodecCtx->height);
+		 pCodecCtx->width*scale, pCodecCtx->height*scale);
   avpicture_fill((AVPicture *)pFrameRGB1, buffer1, PIX_FMT_RGB24,
-		 pCodecCtx->width, pCodecCtx->height);
+		 pCodecCtx->width*scale, pCodecCtx->height*scale);
   
   // Read frames
   i=0;
@@ -118,7 +117,7 @@ int process_ffmpeg_file( const char *fname, FrameHandler &handler )
 	if (pFrameRGBOld && pFrameRGB0->data[0] == pFrameRGBOld->data[0]){
 	  return -1;
 	}
-	if (! handler.handle(pFrameRGB0, pCodecCtx->width, pCodecCtx->height, i++) )
+	if (! handler.handle(pFrameRGB0, pCodecCtx->width*scale, pCodecCtx->height*scale, i++) )
 	  break;
 	pFrameRGBOld = pFrameRGB0;
 	pFrameRGB0 = pFrameRGB1;
