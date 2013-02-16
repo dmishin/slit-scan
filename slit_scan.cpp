@@ -286,7 +286,7 @@ bool Options::parse(int argc, char *argv[])
       throw invalid_argument("Position must be floating-point value in range [0..100] (percents)");
   }
   if (options[SCALE]){
-    stringstream ss(null_to_empty(options[POSITION].last()->arg)); 
+    stringstream ss(null_to_empty(options[SCALE].last()->arg)); 
     if (! (ss >> scale) )
       throw invalid_argument("Scale incorrect");
     if (scale < 1 || scale > 4)
