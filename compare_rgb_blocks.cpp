@@ -13,14 +13,16 @@ double compare_blocks( uint8 *block1, size_t interline1,
 {
   double s = 0;
   for (size_t y = 0; y < height; ++y ){
+    double row_s = 0;
     uint8 *row1, *row2;
     row1 = block1 + (interline1 * y);
     row2 = block2 + (interline2 * y);
     for( size_t x = 0; x < width*3; x+=3 ){
-      s += sqr( (int)row1[x  ] - (int)row2[x  ]); //R
-      s += sqr( (int)row1[x+1] - (int)row2[x+1]); //G
-      s += sqr( (int)row1[x+2] - (int)row2[x+2]); //B
+      row_s += sqr( (int)row1[x  ] - (int)row2[x  ]); //R
+      row_s += sqr( (int)row1[x+1] - (int)row2[x+1]); //G
+      row_s += sqr( (int)row1[x+2] - (int)row2[x+2]); //B
     }
+    s += row_s;
   }
   return sqrt(s / width / height);
 }
