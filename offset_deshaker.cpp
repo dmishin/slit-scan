@@ -22,26 +22,27 @@ OffsetDeshaker::OffsetDeshaker( int x0_, int y0_, int dx_, int dy_, int w, int h
     dissipation_rate = pow( .5, 1.0 / half_return_time );
   }
 }
-void OffsetDeshaker::alloc_key_frame(AVFrame *pFrame)
+void OffsetDeshaker::alloc_key_frame(AVFrame *pFrame, int fheight)
 {
   dealloc_key_frame();
-  key_frame = new uint8_t[ pFrame->linesize[0] * pFrame->height ];
+  key_frame = new uint8_t[ pFrame->linesize[0] * fheight ];
 }
 void OffsetDeshaker::dealloc_key_frame()
 {
   delete[] key_frame;
   key_frame = NULL;
 }
-void OffsetDeshaker::copy_key_frame(AVFrame *pFrame)
+void OffsetDeshaker::copy_key_frame(AVFrame *pFrame, int fheight)
 {
   uint8_t *pSrc = pFrame->data[0];
-  std::copy( pSrc, pSrc + pFrame->linesize[0] * pFrame->height, key_frame );
+  //cout << "Frame height: "<<fheight<<" line size:"<<pFrame->linesize[0]<<endl;
+  std::copy( pSrc, pSrc + (pFrame->linesize[0] * fheight), key_frame );
 }
 bool OffsetDeshaker::handle(AVFrame *pFrame, int fwidth, int fheight, int iFrame)
 {
   if (key_frame == NULL){
-    alloc_key_frame(pFrame);
-    copy_key_frame(pFrame);
+    alloc_key_frame(pFrame, fheight);
+    copy_key_frame(pFrame, fheight);
     return true;
   }
 
@@ -55,6 +56,7 @@ bool OffsetDeshaker::handle(AVFrame *pFrame, int fwidth, int fheight, int iFrame
   
   int deltaX, deltaY;
   double d, dworst;
+  copy_key_frame(pFrame, fheight);
   match_blocks( pBlock1, pFrame->linesize[0],
 		pBlock2, pFrame->linesize[0],
 		width, height,
@@ -69,7 +71,8 @@ bool OffsetDeshaker::handle(AVFrame *pFrame, int fwidth, int fheight, int iFrame
     dy_accum += deltaY;
   }
   cout << iFrame 
-       << "Rate:" << dworst / d
+       << " Rate:" << dworst / d
+       << " dx="<<deltaX <<" dy="<<deltaY
        << " dxa = "<< dx_accum
        << " dya = "<< dy_accum<<endl;
   return true;

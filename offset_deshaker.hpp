@@ -14,9 +14,9 @@ public:
   virtual bool handle(AVFrame *pFrame, int width, int height, int iFrame);
   virtual void get_frame_offset( double &dx, double &dy );
 private:
-  void alloc_key_frame(AVFrame *pFrame);
+  void alloc_key_frame(AVFrame *pFrame, int fheight);
   void dealloc_key_frame();
-  void copy_key_frame(AVFrame *pFrame);
+  void copy_key_frame(AVFrame *pFrame, int fheight);
   
 };
 
