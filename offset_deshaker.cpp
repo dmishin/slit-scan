@@ -6,8 +6,12 @@ using namespace std;
 
 void OffsetDeshaker::get_frame_offset( double &dx, double &dy )
 {
-  dx = dx_accum;
-  dy = dy_accum;
+  x_filter.put(dx_accum);
+  y_filter.put(dy_accum);
+  dx = x_filter.get();
+  dy = y_filter.get();
+  //  dx = dx_accum;
+  //  dy = dy_accum;
 }
 
 OffsetDeshaker::OffsetDeshaker( int x0_, int y0_, int dx_, int dy_, int w, int h, int half_return_time )
