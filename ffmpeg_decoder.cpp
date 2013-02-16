@@ -118,7 +118,7 @@ int process_ffmpeg_file( const char *fname, FrameHandler &handler )
 	if (pFrameRGBOld && pFrameRGB0->data[0] == pFrameRGBOld->data[0]){
 	  return -1;
 	}
-	if (! handler.handle(pFrameRGB0, pFrameRGBOld, pCodecCtx->width, pCodecCtx->height, i++) )
+	if (! handler.handle(pFrameRGB0, pCodecCtx->width, pCodecCtx->height, i++) )
 	  break;
 	pFrameRGBOld = pFrameRGB0;
 	pFrameRGB0 = pFrameRGB1;

@@ -6,7 +6,7 @@ class KeyframeDeshaker: public FrameHandler{
   int x0, y0, dx, dy;
   int width, height;
   double dx_accum, dy_accum;
-  uint8 *key_frame_ptr;
+  uint8_t *key_frame_ptr;
 public:
   KeyframeDeshaker( int x0, int y0, int dx, int dy, int w, int h );
   virtual ~KeyframeDeshaker();
@@ -14,6 +14,7 @@ public:
   virtual void get_frame_offset( double &dx, double &dy );
 private:
   void update_keyframe( AVFrame *pFrame );
+  void alloc_keyframe();
 };
 
 #endif

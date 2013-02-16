@@ -12,7 +12,7 @@ void OffsetDeshaker::get_frame_offset( double &dx, double &dy )
 
 OffsetDeshaker::OffsetDeshaker( int x0_, int y0_, int dx_, int dy_, int w, int h, int half_return_time )
   :x0(x0_), y0(y0_), dx(dx_), dy(dy_)
-  ,width(w), height(h)
+  ,width(w), height(h), key_frame(NULL)
 {
   dx_accum = 0;
   dy_accum = 0;
@@ -22,13 +22,31 @@ OffsetDeshaker::OffsetDeshaker( int x0_, int y0_, int dx_, int dy_, int w, int h
     dissipation_rate = pow( .5, 1.0 / half_return_time );
   }
 }
-
-bool OffsetDeshaker::handle(AVFrame *pFrame, AVFrame *pFrameOld, int fwidth, int fheight, int iFrame)
+void OffsetDeshaker::alloc_key_frame(AVFrame *pFrame)
 {
-  if (pFrameOld == NULL) return true;
+  dealloc_key_frame();
+  key_frame = new uint8_t[ pFrame->linesize[0] * pFrame->height ];
+}
+void OffsetDeshaker::dealloc_key_frame()
+{
+  delete[] key_frame;
+  key_frame = NULL;
+}
+void OffsetDeshaker::copy_key_frame(AVFrame *pFrame)
+{
+  uint8_t *pSrc = pFrame->data[0];
+  std::copy( pSrc, pSrc + pFrame->linesize[0] * pFrame->height, key_frame );
+}
+bool OffsetDeshaker::handle(AVFrame *pFrame, int fwidth, int fheight, int iFrame)
+{
+  if (key_frame == NULL){
+    alloc_key_frame(pFrame);
+    copy_key_frame(pFrame);
+    return true;
+  }
 
   uint8_t * pBlock1 = pFrame->data[0] + x0 * 3 + y0 * pFrame->linesize[0];
-  uint8_t * pBlock2 = pFrameOld->data[0] + x0 * 3 + y0 * pFrameOld->linesize[0];
+  uint8_t * pBlock2 = key_frame + x0 * 3 + y0 * pFrame->linesize[0];
 
   if (x0-dx < 0 || y0-dy < 0 ||
       x0+width+dx >=fwidth || y0+height+dy >= fheight){
@@ -38,20 +56,22 @@ bool OffsetDeshaker::handle(AVFrame *pFrame, AVFrame *pFrameOld, int fwidth, int
   int deltaX, deltaY;
   double d, dworst;
   match_blocks( pBlock1, pFrame->linesize[0],
-		pBlock2, pFrameOld->linesize[0],
+		pBlock2, pFrame->linesize[0],
 		width, height,
 		dx, dy,
 		deltaX, deltaY,
 		d, dworst);
-
+  
   dx_accum *= dissipation_rate;
   dy_accum *= dissipation_rate;
   if (true){//add shift condition here
     dx_accum += deltaX;
     dy_accum += deltaY;
   }
-  cout <<iFrame<< "Rate:"<<dworst / d
-       << " dxa = "<<dx_accum<<" dya = "<<dy_accum<<endl;
+  cout << iFrame 
+       << "Rate:" << dworst / d
+       << " dxa = "<< dx_accum
+       << " dya = "<< dy_accum<<endl;
   return true;
 }
 
