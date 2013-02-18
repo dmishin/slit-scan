@@ -28,12 +28,13 @@ public:
   size_t slit_position;
   SlitOrientation orientation;
   std::ostream &output;
+  int skip_frames;
   size_t width, height;
   size_t frames;
   uint8_t *buffer;
   AbstractOffsetDeshaker *deshaker;
 public:
-  SlitExtractor( double pos, SlitOrientation o, std::ostream &output_ );
+  SlitExtractor( double pos, SlitOrientation o, std::ostream &output_, int skip_frames );
   ~SlitExtractor();
   virtual bool handle(AVFrame *pFrame, int width, int height, int iFrame);
   int slit_width()const;
@@ -52,12 +53,14 @@ std::string base_name( const std::string &path );
 ////////////////////////////////////////////////////////////////////////////////
 // Implementation
 ////////////////////////////////////////////////////////////////////////////////
-SlitExtractor::SlitExtractor(double pos, SlitOrientation o, std::ostream &output_)
+SlitExtractor::SlitExtractor(double pos, SlitOrientation o, std::ostream &output_, int skip_frames_ )
     :slit_position_rel(pos)
     ,orientation(o)
     ,output(output_)
+    ,skip_frames(skip_frames_)
 {
   assert( pos >=0 && pos <= 1.0 );
+  assert( skip_frames >= 0 );
   frames = 0;
   slit_position = 0;
   buffer = NULL;
@@ -71,6 +74,7 @@ SlitExtractor::~SlitExtractor()
 
 bool SlitExtractor::handle(AVFrame *pFrame, int width_, int height_, int iFrame)
 {
+  if (iFrame < skip_frames) return true;//skipping
   if (deshaker) deshaker->handle( pFrame, width_, height_, iFrame);
   if (frames == 0){
     //first frame: perform some initialization
@@ -181,7 +185,7 @@ void read_interpolated( AVFrame * rgb_frame, double x, double y,
   
 }
 */
-  enum  optionIndex { UNKNOWN, HELP, OUTPUT, RAW_OUTPUT, ORIENTATION, POSITION, STABILIZE, SCALE };
+enum  optionIndex { UNKNOWN, HELP, OUTPUT, RAW_OUTPUT, ORIENTATION, POSITION, STABILIZE, SCALE, SKIP_FRAMES };
 
 const option::Descriptor usage[] =
 {
@@ -200,7 +204,9 @@ const option::Descriptor usage[] =
  {STABILIZE, 0, "-s", "stabilize", option::Arg::Optional,
   "  --stabilize, -s \tUse simple image stabilization to reduce shaking. Format: x:y:w:h[:rx:ry:relax_frames]"},
  {SCALE, 0, "-k", "scale", option::Arg::Optional,
-  "  --scale, -k \t. Scale image before applying deshake. Integer 1..4"},
+  "  --scale, -k \tScale image before applying deshake. Integer 1..4"},
+ {SKIP_FRAMES, 0, "-S", "skip-frames", option::Arg::Optional,
+  "  --skip-frames=N, -S \tSkip N first frames from the video (useful for skipping iitial shake)" },
 
  {0,0,0,0,0,0}
 };
@@ -229,6 +235,7 @@ struct Options{
   double position;
   string input_file;
   int scale;
+  int skip_frames;
 
   //stabilization options
   bool stabilize; //enable or disable
@@ -245,6 +252,7 @@ struct Options{
     ,stabilize_search_range_y(10)
     ,stabilize_relaxation_frames(200)
     ,scale(1)
+    ,skip_frames(0)
   {}
   bool parse( int argc, char *argv[] );
 private:
@@ -292,6 +300,11 @@ bool Options::parse(int argc, char *argv[])
     if (scale < 1 || scale > 4)
       throw invalid_argument("Scale must be in range 1..4");
   }
+  if (options[SKIP_FRAMES]){
+    stringstream ss(null_to_empty(options[SKIP_FRAMES].last()->arg)); 
+    if (! (ss >> skip_frames)) throw invalid_argument("Failed to parse frame number");
+    if (skip_frames < 0) throw invalid_argument("Number of frames must be positive");
+  }
   if (options[STABILIZE]){
     parse_stabilization_options(null_to_empty(options[STABILIZE].last()->arg));
   }
@@ -314,7 +327,8 @@ bool Options::parse(int argc, char *argv[])
        << " Input:"<<input_file<<endl
        << " Raw output:"<<raw_output<<endl
        << " Output:"<<output<<endl
-       << " Scale:"<<scale<<endl;
+       << " Scale:"<<scale<<endl
+       << " Skip frames:"<<skip_frames<<endl;
   
   if (stabilize){
     cout << " Stabilization enabled. Box:"<<endl
@@ -420,7 +434,7 @@ int main( int argc, char *argv[] )
 
   ofstream ostream( options.raw_output.c_str(), ios_base::binary );
 
-  SlitExtractor extractor( options.position*0.01, options.orientation, ostream );
+  SlitExtractor extractor( options.position*0.01, options.orientation, ostream, options.skip_frames );
   OffsetDeshaker * deshaker = NULL;
   if ( options.stabilize ){
     int s = options.scale;
