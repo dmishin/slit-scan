@@ -30,4 +30,8 @@ Tools
 =====
 
 vertical_jitter_fix.py
-   Tool for removing vertical 
+   Tool for removing vertical jitter from the images.
+   Useful for post-processing slit scan photos, made from shaky videos.
+   Requires Python2, PIL and Numpy.
+   Usage: 
+   $ python vertical_jitter_fix.py --help
