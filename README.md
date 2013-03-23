@@ -24,3 +24,10 @@ Sample usage
 Will generate video.png in the current directory.
 
 See ./slit-scan --help for more information about keys
+
+
+Tools
+=====
+
+vertical_jitter_fix.py
+   Tool for removing vertical 
