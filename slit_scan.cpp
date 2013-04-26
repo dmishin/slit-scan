@@ -64,6 +64,7 @@ SlitExtractor::SlitExtractor(double pos, SlitOrientation o, std::ostream &output
   frames = 0;
   slit_position = 0;
   buffer = NULL;
+  deshaker = NULL;
 }
 
 SlitExtractor::~SlitExtractor()
