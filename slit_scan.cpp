@@ -58,6 +58,7 @@ SlitExtractor::SlitExtractor(double pos, SlitOrientation o, std::ostream &output
     ,orientation(o)
     ,output(output_)
     ,skip_frames(skip_frames_)
+    ,deshaker(NULL)
 {
   assert( pos >=0 && pos <= 1.0 );
   assert( skip_frames >= 0 );
