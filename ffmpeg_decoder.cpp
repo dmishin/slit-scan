@@ -54,11 +54,11 @@ int process_ffmpeg_file( const char *fname, FrameHandler &handler, int scale )
     return -1; // Could not open codec
   
   // Allocate video frame
-  pFrame=avcodec_alloc_frame();
+  pFrame=av_frame_alloc();
   
   // Allocate an AVFrame structure
-  pFrameRGB0=avcodec_alloc_frame();
-  pFrameRGB1=avcodec_alloc_frame();
+  pFrameRGB0=av_frame_alloc();
+  pFrameRGB1=av_frame_alloc();
   if(pFrameRGB0==NULL || pFrameRGB1==NULL || pFrameRGB1 == pFrameRGB0)
     return -1;
   
