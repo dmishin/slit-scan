@@ -63,7 +63,7 @@ int process_ffmpeg_file( const char *fname, FrameHandler &handler, int scale )
     return -1;
   
   // Determine required buffer size and allocate buffer
-  numBytes=avpicture_get_size(PIX_FMT_RGB24, pCodecCtx->width*scale,
+  numBytes=avpicture_get_size(AV_PIX_FMT_RGB24, pCodecCtx->width*scale,
 			      pCodecCtx->height*scale);
   buffer0=(uint8_t *)av_malloc(numBytes*sizeof(uint8_t));
   buffer1=(uint8_t *)av_malloc(numBytes*sizeof(uint8_t));
@@ -76,7 +76,7 @@ int process_ffmpeg_file( const char *fname, FrameHandler &handler, int scale )
         pCodecCtx->pix_fmt,
         pCodecCtx->width*scale,
         pCodecCtx->height*scale,
-        PIX_FMT_RGB24,
+        AV_PIX_FMT_RGB24,
         SWS_BILINEAR,
         NULL,
         NULL,
@@ -86,9 +86,9 @@ int process_ffmpeg_file( const char *fname, FrameHandler &handler, int scale )
   // Assign appropriate parts of buffer to image planes in pFrameRGB
   // Note that pFrameRGB is an AVFrame, but AVFrame is a superset
   // of AVPicture
-  avpicture_fill((AVPicture *)pFrameRGB0, buffer0, PIX_FMT_RGB24,
+  avpicture_fill((AVPicture *)pFrameRGB0, buffer0, AV_PIX_FMT_RGB24,
 		 pCodecCtx->width*scale, pCodecCtx->height*scale);
-  avpicture_fill((AVPicture *)pFrameRGB1, buffer1, PIX_FMT_RGB24,
+  avpicture_fill((AVPicture *)pFrameRGB1, buffer1, AV_PIX_FMT_RGB24,
 		 pCodecCtx->width*scale, pCodecCtx->height*scale);
   
   // Read frames
